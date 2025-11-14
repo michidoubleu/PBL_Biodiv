@@ -28,6 +28,7 @@ write.nc <- FALSE    # netCDF writing controlled at the end
 ###############################################################
 
 define.path <- "P:/globiom/Projects/SSPs/ScenarioMIP7/Results/lookup_table_results_withSSPV3/lookup_table_v5_16Jun2025/raw_results/Biodiversity_Link"
+template.path <- "P:/globiom/Projects/PBL_BIODIV_2025/Postprocessing_ncdf/template"
 
 ###############################################################
 # Load scenario mapping
@@ -96,8 +97,8 @@ for (jjj in seq_along(filtered.files)) {
 # Land-Cover Mapping (two-stage)
 ###############################################################
 
-mapping_LC_names_1 <- readRDS("./codes/mapping_for_G4MDSlink.RData")[[3]]
-mapping_LC_names_2 <- readRDS("./codes/mapping_for_G4MDSlink.RData")[[4]]
+mapping_LC_names_1 <- readRDS(paste0(template.path,"/mapping_for_G4MDSlink.RData"))[[3]]
+mapping_LC_names_2 <- readRDS(paste0(template.path,"/mapping_for_G4MDSlink.RData"))[[4]]
 
 setDT(df.link.results)
 mapping1 <- as.data.table(mapping_LC_names_1)
@@ -141,7 +142,7 @@ results3 <- as.data.frame(results3)
 # Prepare for CSV Output (following Prep_CSV_for_netcdf structure)
 ###############################################################
 
-full_simu_map <- read.csv("./template/full_simu_map_biodiv.csv", stringsAsFactors = FALSE)
+full_simu_map <- read.csv(paste0(template.path,"/full_simu_map_biodiv.csv"), stringsAsFactors = FALSE)
 
 mapping_simuID <- full_simu_map %>%
   dplyr::select(SimUID, country, REGION_37, colrowID) %>%

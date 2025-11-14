@@ -5,6 +5,8 @@
 rm(list=ls())
 
 date.tag <- "2025-11-14"
+template.path <- "P:/globiom/Projects/PBL_BIODIV_2025/Postprocessing_ncdf/template"
+
 # LIBRARIES ---------------------------------------------------------------
 
 #require(ncdf)
@@ -52,18 +54,18 @@ setting.file <- list.files(getwd())
 setting.file <- setting.file[grepl("setting", setting.file)]
 scenarios = read.csv(setting.file)
 
-full_simu_map = read.csv("./template/full_simu_map_biodiv.csv",stringsAsFactors = FALSE)
+full_simu_map = read.csv(paste0(template.path,"/full_simu_map_biodiv.csv"),stringsAsFactors = FALSE)
 
 
 
-area_open <- nc_open('template/BendingTheCurveFT-LCproj-MODEL-SCEN-DATE.nc')
+area_open <- nc_open(paste0(template.path,'/BendingTheCurveFT-LCproj-MODEL-SCEN-DATE.nc'))
 #print(area_open)
 area_variable_Mha <- ncvar_get(area_open, "pixel_area")
 
 #add_file <- nc_open('to_be_added_to_other.nc')
 #print(area_open)
 #fix_toAddToOther <- ncvar_get(add_file, "fix_toAddToOther")
-add_file = read.csv("./template/half_degree_share_pixel_area_underSimU0.csv",stringsAsFactors = FALSE)
+add_file = read.csv(paste0(template.path,"/half_degree_share_pixel_area_underSimU0.csv"),stringsAsFactors = FALSE)
 ## coordinates not fully correct, set right
 add_file$POINT_X = round(add_file$POINT_X,2)
 add_file$POINT_Y = round(add_file$POINT_Y,2)
@@ -98,7 +100,7 @@ add_file_colrow = aggregate(add_file$share_pixel_under_SimU0 * add_file$Shape_Ar
 
 ### load geosims info -----
 #GLOBIOM's simulation units; we have to convert to this
-geosims <- raster("./template/shape_GLOBIOM/raster_simU/w001001.adf")
+geosims <- raster(paste0(template.path,"/shape_GLOBIOM/raster_simU/w001001.adf"))
 proj4string(geosims)<-p4s #apply projection manually
 save_geovals <- data.frame(getValues(geosims)) #just the SimU IDs
 colnames(save_geovals)<-"SimUID"
@@ -112,7 +114,7 @@ geosims_area = setValues(geosims_area,ttemp)
 
 ### load protection areas data ------
 ### protected areas: static raster in BIOD scenarios
-protectedSimU = read.csv("./template/forbidBII_10Dec2018.csv",stringsAsFactors = FALSE)
+protectedSimU = read.csv(paste0(template.path,"/forbidBII_10Dec2018.csv"),stringsAsFactors = FALSE)
 protectedSimU = rowSums(protectedSimU == 0)
 protectedSimU[protectedSimU > 0] = 1
 protectedCR = aggregate(list(value = protectedSimU),by = list(colrow = full_simu_map$colrowID),FUN = sum)
@@ -127,7 +129,7 @@ data[data == 1] = 0
 not_protectedMap = setValues(not_protectedMap,data)
 
 ## protected pct of pixel from 2000 onwards
-LU2000 = read.csv("./template/SimU_LU_biodiv_G4M_jan19.csv",stringsAsFactors = FALSE)
+LU2000 = read.csv(paste0(template.path,"/SimU_LU_biodiv_G4M_jan19.csv"),stringsAsFactors = FALSE)
 protected_othfor_CR = aggregate(list(
   value = (LU2000$protected_priforest + LU2000$protected_other)/10^6
 ),by = list(colrow = full_simu_map$colrowID),FUN = sum)
@@ -143,11 +145,9 @@ protected_othfor_Map = setValues(protected_othfor_Map,t(data))
 
 
 # 2. Process LU/LUC names ---------------------------------------------------------------
-# load_date_tag = settings$date_tag
-load_date_tag = "lowp2cor3dev3_6jun19_mod1" #Yazhen: for testing output (because did not find resJan19_SPA0_RCPref_SSP2_NOBIOD_SSP2_lowp2cor3dev3_6jun19_withG4M__luc.csv in the \downscale_biodiversity_G4M\ folder, only found "resJan19_SPA0_RCPref_SSP2_NOBIOD_SSP2_lowp2cor3dev3_6jun19_mod1__luc.csv" in this folder.
 
-to00 = read.csv("./template/to00.csv",row.names = 1)
-to10 = read.csv("./template/to10.csv",row.names = 1)
+to00 = read.csv(paste0(template.path,"/to00.csv"),row.names = 1)
+to10 = read.csv(paste0(template.path,"/to10.csv"),row.names = 1)
 
 ### LU & LUC classes that are extracted drom the downscaled output 
 from_file2000_LU_name = c("cropland","grassland","priforest","mngforest",
