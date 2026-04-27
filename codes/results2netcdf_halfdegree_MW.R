@@ -2,22 +2,20 @@
 # For saving spatrially explicit results to netcdf file
 # Author: T. Krisztin, krisztin@iiasa.ac.at
 
-rm(list=ls())
-
-date.tag <- "2025-11-14"
 template.path <- "P:/globiom/Projects/PBL_BIODIV_2025/Postprocessing_ncdf/template"
-
+date.tag <- "2025-12-10"
 # LIBRARIES ---------------------------------------------------------------
 
 #require(ncdf)
-require(raster)
+library(dplyr)
+library(tidyr)
+library(raster)
 library(ncdf4) 
-library(ncdf4.helpers)
-library(PCICt)
 library(lattice)
 library(ggplot2)
 require(reshape2)
 require(stringr)
+
 
 
 # Settings ---------------------------------------------------------------
@@ -52,6 +50,7 @@ latcr_inv = function(x) { (x + 179.75) / .5 + 1}
 # load from file
 setting.file <- list.files(getwd())
 setting.file <- setting.file[grepl("setting", setting.file)]
+setting.file <- setting.file[grepl(date.tag, setting.file)]
 scenarios = read.csv(setting.file)
 
 full_simu_map = read.csv(paste0(template.path,"/full_simu_map_biodiv.csv"),stringsAsFactors = FALSE)
@@ -222,6 +221,9 @@ for (sss in 1:nrow(scenarios)) {
   summary(res_file_LU$AreaDiff)
   sum(res_file_LU$AreaDiff)
   res_file_LU1 <- res_file_LU
+  
+  detach("package:reshape2", unload = TRUE)
+  library(reshape2)
   
   df.pixel_area <- melt(area_variable_Mha,id.vars=c(1))
   df.pixel_area$colrow = paste0("CR",
@@ -695,40 +697,41 @@ for (sss in 1:nrow(scenarios)) {
       
       #### Check1 - sum of this year's LC share ------
       # check the output range of LU & sum of LU
-      TOL_VAL = 10^-7
-      rrange1 = range(LandCover_pixshare_array,na.rm=T)
-      # if (any(rrange1< 0-TOL_VAL) || any(rrange1> 1 + TOL_VAL)) {
-        # stop("NetCDF LU share error!")
-      # } #YW temporary
-      pix_totals = apply(LandCover_pixshare_array[,,,t],c(1,2),sum) # sum over all LU - classes
-      rrange2 = range(pix_totals,na.rm = T)
-      # if (any(rrange2< 0-TOL_VAL) || any(rrange2> 1 + TOL_VAL)) {
-        # stop("NetCDF LU share error!")
-      # }#YW temporary
-      pix_ranges = apply(LandCover_pixshare_array[,,,t],c(3),range,na.rm = T)
-      
+      # TOL_VAL = 10^-7
+      # rrange1 = range(LandCover_pixshare_array,na.rm=T)
+      # # if (any(rrange1< 0-TOL_VAL) || any(rrange1> 1 + TOL_VAL)) {
+      #   # stop("NetCDF LU share error!")
+      # # } #YW temporary
+      # pix_totals = apply(LandCover_pixshare_array[,,,t],c(1,2),sum) # sum over all LU - classes
+      # rrange2 = range(pix_totals,na.rm = T)
+      # # if (any(rrange2< 0-TOL_VAL) || any(rrange2> 1 + TOL_VAL)) {
+      #   # stop("NetCDF LU share error!")
+      # # }#YW temporary
+      # pix_ranges = apply(LandCover_pixshare_array[,,,t],c(3),range,na.rm = T)
+
       output_netCDFs[[david_version]] = LandCover_pixshare_array
     } #end loop for David's versions
-    
-    #### Check2 - EXPs consistency ------
-    ### test here for consistency, that is EXP3[crp] - EXP2[crp] = EXP5[crp.abn]
-    exp2 = output_netCDFs[["EXP2"]][,,,t]
-    exp3 = output_netCDFs[["EXP3"]][,,,t]
-    exp5 = output_netCDFs[["EXP5"]][,,,t]
-    lcc = "cropland"
-    for (lcc in c("cropland","grassland","SRP")) {
-      tt1 = exp3[,,which(to_file_EXP1to3_LU_name == lcc)] - 
-        exp2[,,which(to_file_EXP1to3_LU_name == lcc)]
-      tt2 = exp5[,,which(to_file_EXP4to5_LU_name == paste0(lcc,".other"))] - tt1
-      # if ( any(abs(range(tt2,na.rm=T))> TOL_VAL ) ) {
-        # stop(lcc,": EXP1-5 test failed!")
-      # }#YW temporary
-    } #end lcc
-    
+
+    # #### Check2 - EXPs consistency ------
+    # ### test here for consistency, that is EXP3[crp] - EXP2[crp] = EXP5[crp.abn]
+    # exp2 = output_netCDFs[["EXP2"]][,,,t]
+    # exp3 = output_netCDFs[["EXP3"]][,,,t]
+    # exp5 = output_netCDFs[["EXP5"]][,,,t]
+    # lcc = "cropland"
+    # for (lcc in c("cropland","grassland","SRP")) {
+    #   tt1 = exp3[,,which(to_file_EXP1to3_LU_name == lcc)] -
+    #     exp2[,,which(to_file_EXP1to3_LU_name == lcc)]
+    #   tt2 = exp5[,,which(to_file_EXP4to5_LU_name == paste0(lcc,".other"))] - tt1
+    #   # if ( any(abs(range(tt2,na.rm=T))> TOL_VAL ) ) {
+    #     # stop(lcc,": EXP1-5 test failed!")
+    #   # }#YW temporary
+    # } #end lcc
+
     cat("test.\n")
-    
-  } # end loop for t
+
+} # end loop for t
   
+  output_netCDFs <- fix_LC_arrays(output_netCDFs)
   
   exp1 = output_netCDFs[["EXP1"]]
   exp2 = output_netCDFs[["EXP2"]]

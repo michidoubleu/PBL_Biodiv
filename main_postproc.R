@@ -13,59 +13,77 @@
 library(dplyr)
 library(tidyr)
 library(data.table)
+source("./codes/helper_functions.R")
 
 ###############################################################
 # User parameters
 ###############################################################
-
+date.tag <- "2025-12-10"
+correct.G4M <- TRUE
 create.masked <- TRUE
 create.global <- TRUE
-write.nc <- FALSE    # netCDF writing controlled at the end
+write.nc <- TRUE    # netCDF writing controlled at the end
+amanda.files <- FALSE
 
 ###############################################################
 # Path Settings
 # NOTE: This is a network location used within PBL
 ###############################################################
 
-define.path <- "P:/globiom/Projects/SSPs/ScenarioMIP7/Results/lookup_table_results_withSSPV3/lookup_table_v5_16Jun2025/raw_results/Biodiversity_Link"
+
+# #### SCENMIP7 Lookup
+# define.path <- "P:/globiom/Projects/SSPs/ScenarioMIP7/Results/lookup_table_results_withSSPV3/lookup_table_v5_16Jun2025/raw_results/Biodiversity_Link"
+# G4M.path <- "P:/globiom/Projects/SSPs/ScenarioMIP7/Results/lookup_table_results_withSSPV3/lookup_table_v5_16Jun2025/raw_results/G4M/out/BetterLookup2SSP2a_20250613"
+# proj.name <- "BetterLookup2SSP2a_20250613"
+# all.scenarios <- read.csv(paste0(define.path, "/scenario_mapping_BetterLookup2SSP2a_20250613_selectedScens.csv"))
+# scen.selection <- c("GHG000_BIO03", "GHG000_BIO06", "GHG100_BIO03", "GHG100_BIO06", "GHG400_BIO03", "GHG400_BIO06")
+# choose.scen <- all.scenarios %>% filter(SCEN2%in%scen.selection)
+
+#### ScenarioMIP7 - SSPV3
+define.path <- "P:/globiom/Projects/SSPs/ScenarioMIP7/Results/scenario_results_with_SSPV3/2025v5/final_version/raw_results/Biodiversity_Link/Output/Trunk5266_MSGfdbkOct2025_final"
+G4M.path <- "P:/globiom/Projects/SSPs/ScenarioMIP7/Results/scenario_results_with_SSPV3/2025v5/final_version/raw_results/G4M/out/Trunk5266_MSGfdbkOct2025_final_20251024"
+proj.name <- "Trunk5266_MSGfdbkOct2025_final_20251024"
+all.scenarios <- read.csv(paste0(define.path, "/scenario_mapping_Trunk5266_MSGfdbkOct2025_final_20251024.csv"))
+scen.selection <- c("SSP2_VL" ,"SSP2_H", "SSP2_M", "SSP2_LOS", "LED_VL")
+choose.scen <- all.scenarios %>% filter(SCEN3%in%scen.selection)
+
+#### UK scaled
+# define.path <- "P:/globiom/Projects/PBL_BIODIV_2025/UK_runs/Biodiversity_Link/Output"
+# G4M.path <- "P:/globiom/Projects/PBL_BIODIV_2025/UK_runs/G4M/out/DESNZ_22082025"
+# proj.name <- "DESNZ_22082025"
+# all.scenarios <- read.csv(paste0(define.path, "/../scenario_mapping.csv"))
+# scen.selection <- c("GHG000_LINEAR", "GHG100_LINEAR", "GHG400_LINEAR")
+# choose.scen <- all.scenarios %>% filter(SCEN3=="SCENRCP4P5", SCEN2%in%scen.selection)
+
+
+
 template.path <- "P:/globiom/Projects/PBL_BIODIV_2025/Postprocessing_ncdf/template"
 
+
+mapping.G4M <- readRDS(file = 'input/G4M_mapping.RData')[[1]]
+mapping.G4M <- apply(mapping.G4M, 2, as.character)
+mapping.G4M <- data.frame(mapping.G4M)
+mapping.G4M <- mapping.G4M %>% rename("g4m_id" = "g4m_05_id", "ns" = "SimUID")
+
 ###############################################################
-# Load scenario mapping
+# Select scenario to run 
 ###############################################################
 
-scenarios <- read.csv(paste0(define.path, "/scenario_mapping_BetterLookup2SSP2a_20250613_2SCENS.csv"))
+curr.scen <- 1     # <-- loop index (single-run for now)
+for(curr.scen in unique(choose.scen$ScenLoop)){
+
 scen.setting <- NULL
-
-###############################################################
-# Utility Function: Filter files by numeric suffix
-###############################################################
-
-filter_paths <- function(paths, keep, digits = 6) {
-  ids <- sub(".*(?:\\.|_)(\\d+)\\.RData$", "\\1", paths, perl = TRUE)
-  ids[grepl("^[0-9]+$", ids) == FALSE] <- NA
-  ids_num <- as.numeric(ids)
-  mod <- 10^digits
-  last_digits <- ids_num %% mod
-  idx <- !is.na(last_digits) & (last_digits %in% keep)
-  paths[idx]
-}
-
-###############################################################
-# Select scenario to run
-###############################################################
-
-curr.scen <- 3     # <-- loop index (single-run for now)
-
-curr.loops <- scenarios$ScenNr[scenarios$ScenLoop == curr.scen]
+curr.loops <- all.scenarios$ScenNr[all.scenarios$ScenLoop == curr.scen]
 
 # Make scenario name + record scenario settings
-sc_row <- unique(subset(scenarios, ScenLoop == curr.scen,
+sc_row <- unique(subset(all.scenarios, ScenLoop == curr.scen,
                         select = c("SCEN1", "SCEN2", "SCEN3")))
 Scen <- paste(sc_row, collapse = "-")
 
 curr.scen <- data.frame(Scen = Scen, sc_row, row.names = NULL)
 scen.setting <- scen.setting %>% bind_rows(curr.scen)
+
+G4M.path.scen <- paste0(G4M.path, "/area_harvest_map_",proj.name,"_",curr.scen$SCEN1,"_",curr.scen$SCEN3,"_",curr.scen$SCEN2,".csv")
 
 ###############################################################
 # Read RData results to be processed
@@ -74,13 +92,24 @@ scen.setting <- scen.setting %>% bind_rows(curr.scen)
 all.files <- list.files(define.path, full.names = TRUE)
 filtered.files <- filter_paths(all.files, curr.loops)
 
-# keep only files from the latest timestamp
-filtered.files <- filtered.files[
-  substr(filtered.files, nchar(filtered.files)-17, nchar(filtered.files)-13) ==
-    as.character(max(as.numeric(substr(filtered.files,
-                                       nchar(filtered.files)-17,
-                                       nchar(filtered.files)-13))))
-]
+if(amanda.files){
+# Extract the 4-digit number before the last 6-digit number
+four_digit <- sub(".*_(\\d{4})\\.\\d{6}\\.RData$", "\\1", filtered.files)
+# Convert to numeric (invalid extractions become NA)
+four_digit_num <- as.numeric(four_digit)
+# Find the maximum 4-digit number
+max_val <- max(four_digit_num, na.rm = TRUE)
+# Filter files that match the maximum
+filtered.files <- filtered.files[four_digit_num == max_val]
+}
+
+# # keep only files from the latest timestamp
+# filtered.files <- filtered.files[
+#   substr(filtered.files, nchar(filtered.files)-17, nchar(filtered.files)-13) ==
+#     as.character(max(as.numeric(substr(filtered.files,
+#                                        nchar(filtered.files)-17,
+#                                        nchar(filtered.files)-13))))
+# ]
 
 ###############################################################
 # Load link result list objects and merge
@@ -131,12 +160,69 @@ results2[, lu.to := lu.final]
 results2[, lu.final := NULL]
 
 ### Stage 3 — aggregate
-results3 <- results2[
+results2 <- results2[
   , .(value = sum(value) * 1000),
   by = .(REGION, times, ns, lu.to, lu.from)
 ]
 
-results3 <- as.data.frame(results3)
+results2 <- as.data.frame(results2)
+
+###### read and apply the forest is used G4M results to get closer to Biodiversity-Link res
+if(correct.G4M){
+  G4M.res <- read.csv(G4M.path.scen) %>% dplyr::select(g4m_id, year, used)
+  
+  
+  ### with 2000 change. potentially wrong as lu.from is not mng for
+  # results2 <- results2 %>% 
+  #   left_join(mapping.G4M) %>% 
+  #   left_join(G4M.res %>% 
+  #       rename(times = year) %>%
+  #       mutate(g4m_id = as.character(g4m_id))
+  #   ) %>%
+  #   mutate(used = ifelse(is.na(used), 0, used)) %>%
+  #   mutate(
+  #     mask = lu.to %in% c("priforest", "mngforest"),
+  #     lu.to = if_else(mask, if_else(used == 1, "mngforest", "priforest"), lu.to)
+  #   ) %>% dplyr::select(-mask) %>% 
+  #   left_join(G4M.res %>% 
+  #                 filter(year==2000) %>% 
+  #                 mutate(times=2010, used_2000=used, g4m_id = as.character(g4m_id)) %>%
+  #                 dplyr::select(-year,-used)
+  #   ) %>%
+  #   mutate(used_2000 = ifelse(is.na(used_2000), 0, used_2000)) %>%
+  #   mutate(
+  #     mask = lu.from %in% c("priforest", "mngforest"),
+  #     lu.from = if_else(mask, if_else(used_2000 == 1, "mngforest", "priforest"), lu.from)
+  #   ) %>% group_by(REGION, times, ns, lu.to, lu.from) %>%
+  #   summarise(value=sum(value))
+  
+  
+  results2 <- results2 %>% 
+    left_join(mapping.G4M) %>% 
+    left_join(G4M.res %>% 
+                rename(times = year) %>%
+                mutate(g4m_id = as.character(g4m_id))
+    ) %>%
+    mutate(used = ifelse(is.na(used), 0, used)) %>%
+    mutate(
+      mask = lu.to %in% c("priforest", "mngforest"),
+      lu.to = if_else(mask, if_else(used == 1, "mngforest", "priforest"), lu.to)
+    ) 
+  
+  
+  setDT(results2)  
+  results2 <- results2[
+    , .(value = sum(value) * 1000),
+    by = .(REGION, times, ns, lu.to, lu.from)
+  ]
+  results2 <- as.data.frame(results2)
+  
+}
+
+
+
+
+
 
 ###############################################################
 # Prepare for CSV Output (following Prep_CSV_for_netcdf structure)
@@ -159,7 +245,7 @@ REGION_AG_Array <- c(
   "SouthernAf", "WesternAf", "TurkeyReg", "UkraineReg", "USAReg"
 )
 
-linking_out <- results3
+linking_out <- results2
 
 ###############################################################
 # Compile LC CSV
@@ -174,11 +260,16 @@ linking.resultLC.2000 <- linking_out %>%
          times = as.integer(times)) %>%
   rename(LC = lu.from, SimUID = ns, Year = times)
 
+
 # LC transitions
 linking.resultLC <- linking_out %>%
   group_by(ns, times, lu.to) %>%
   summarize(value = sum(value), .groups = "keep") %>%
-  rename(LC = lu.to, SimUID = ns, Year = times) %>%
+  rename(LC = lu.to, SimUID = ns, Year = times) 
+
+
+
+linking.resultLC <- linking.resultLC %>%
   bind_rows(linking.resultLC.2000) %>%
   spread(key = LC, value = value) %>%
   mutate(SimUID = as.numeric(as.character(SimUID))) %>%
@@ -193,10 +284,12 @@ linking.resultLC <- linking_out %>%
     protected_priforest = 0
   )
 
+
+
 linking.resultLC <- linking.resultLC %>% mutate(restored = 0)
 if (!"SRP" %in% names(linking.resultLC)) linking.resultLC$SRP <- 0
 
-linking.resultLC$Area <- rowSums(linking.resultLC[, -c(1:2)])
+linking.resultLC$Area <- rowSums(linking.resultLC[, -c(1:2)], na.rm = T)
 
 # Add colrow + region information
 linking.resultLC.final <- linking.resultLC %>%
@@ -262,13 +355,13 @@ linking.resultLCLUC.final[is.na(linking.resultLCLUC.final)] <- 0
 
 write.csv(
   linking.resultLCLUC.final %>% arrange(Year, SimUID),
-  file = paste0("./output/", Scen, "_", Sys.Date(), "_LULUC.csv"),
+  file = paste0("./output/", Scen, "_", date.tag, "_LULUC.csv"),
   row.names = FALSE
 )
 
 write.csv(
   scen.setting,
-  file = paste0("./scen_setting_", Sys.Date(), ".csv"),
+  file = paste0("./scen_setting_", date.tag, ".csv"),
   row.names = FALSE
 )
 
@@ -279,7 +372,7 @@ write.csv(
 if (write.nc) {
   source("codes/results2netcdf_halfdegree_MW.R")
 }
-
+}
 ###############################################################
 # End of main script
 ###############################################################
